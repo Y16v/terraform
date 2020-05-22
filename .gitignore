@@ -1,2 +1,3 @@
 .vscode/*
 .terraform/*
+ec2-wp.pub
