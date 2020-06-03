@@ -12,7 +12,7 @@ sleep 5
 tar -xzf latest.tar.gz
 sudo systemctl start mariadb
 sudo cp wordpress/wp-config-sample.php wordpress/wp-config.php
-sudo sed -i 's/database_name_here/wp2/' wordpress/wp-config.php
+sudo sed -i 's/database_name_here/mydb/' wordpress/wp-config.php
 sudo sed -i 's/username_here/admin/' wordpress/wp-config.php
 sudo sed -i 's/password_here/adminadmin/' wordpress/wp-config.php
 sudo sed -i 's/localhost/terraform-20200520112823394200000001.cu2vapzameti.us-east-1.rds.amazonaws.com/' wordpress/wp-config.php

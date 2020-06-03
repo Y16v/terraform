@@ -1,5 +1,5 @@
 resource "aws_vpc" "wordpress-vpc" {
-  cidr_block           = "10.121.0.0/16"
+  cidr_block           = var.vpc_cidr_block
   enable_dns_support   = true
   enable_dns_hostnames = true
 
@@ -17,69 +17,25 @@ resource "aws_internet_gateway" "worpdress_igw" {
   }
 }
 
-resource "aws_subnet" "public-subnet-1" {
+resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.wordpress-vpc.id
-  availability_zone       = "us-east-1a"
-  cidr_block              = "10.121.0.0/24"
+  availability_zone       = var.public_subnet_availability_zones[count.index]
+  count                   = length(var.public_subnet_cidr_blocks)
+  cidr_block              = var.public_subnet_cidr_blocks[count.index]
   map_public_ip_on_launch = true
-
   tags = {
-    Name = "wordpress-public-subnet-1"
+    Name = "wordpress-public-subnet-${count.index + 1}"
   }
 }
 
-resource "aws_subnet" "public-subnet-2" {
-  vpc_id                  = aws_vpc.wordpress-vpc.id
-  availability_zone       = "us-east-1b"
-  cidr_block              = "10.121.1.0/24"
-  map_public_ip_on_launch = true
+resource "aws_subnet" "private" {
+  vpc_id            = aws_vpc.wordpress-vpc.id
+  availability_zone = var.private_subnet_availability_zones[count.index]
+  count             = length(var.private_subnet_cidr_blocks)
+  cidr_block        = var.private_subnet_cidr_blocks[count.index]
 
   tags = {
-    Name = "wordpress-public-subnet-2"
-  }
-}
-
-resource "aws_subnet" "public-subnet-3" {
-  vpc_id                  = aws_vpc.wordpress-vpc.id
-  availability_zone       = "us-east-1c"
-  cidr_block              = "10.121.2.0/24"
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name = "wordpress-public-subnet-3"
-  }
-}
-
-resource "aws_subnet" "private-subnet-1" {
-  vpc_id                  = aws_vpc.wordpress-vpc.id
-  availability_zone       = "us-east-1d"
-  cidr_block              = "10.121.3.0/24"
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name = "wordpress-private-subnet-1"
-  }
-}
-
-resource "aws_subnet" "private-subnet-2" {
-  vpc_id                  = aws_vpc.wordpress-vpc.id
-  availability_zone       = "us-east-1e"
-  cidr_block              = "10.121.4.0/24"
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name = "wordpress-private-subnet-2"
-  }
-}
-
-resource "aws_subnet" "private-subnet-3" {
-  vpc_id                  = aws_vpc.wordpress-vpc.id
-  availability_zone       = "us-east-1f"
-  cidr_block              = "10.121.5.0/24"
-  map_public_ip_on_launch = true
-
-  tags = {
-    Name = "wordpress-private-subnet-3"
+    Name = "wordpress-private-subnet-${count.index + 1}"
   }
 }
 
@@ -96,22 +52,10 @@ resource "aws_route_table" "wp-rt" {
   }
 }
 
-resource "aws_route_table_association" "association-1" {
-  subnet_id      = aws_subnet.public-subnet-1.id
+resource "aws_route_table_association" "public-subnet-association" {
+  count          = length(var.public_subnet_cidr_blocks)
+  subnet_id      = element(aws_subnet.public[*].id, count.index)
   route_table_id = aws_route_table.wp-rt.id
-}
-resource "aws_route_table_association" "association-2" {
-  subnet_id      = aws_subnet.public-subnet-2.id
-  route_table_id = aws_route_table.wp-rt.id
-}
-resource "aws_route_table_association" "association-3" {
-  subnet_id      = aws_subnet.public-subnet-3.id
-  route_table_id = aws_route_table.wp-rt.id
-}
-
-variable "ingress_ports" {
-  type    = list(number)
-  default = [80, 443, 22]
 }
 
 resource "aws_security_group" "sg" {
@@ -151,16 +95,16 @@ resource "aws_security_group" "sg" {
 
 resource "aws_key_pair" "ssh-key" {
   key_name   = "wordpress-pub-key"
-  public_key = file("ec2-wp.pub")
+  public_key = file(var.ssh_key_file)
 }
 
 resource "aws_instance" "wordpress-ec2" {
-  ami                    = "ami-0323c3dd2da7fb37d"
-  instance_type          = "t2.micro"
-  subnet_id              = aws_subnet.public-subnet-1.id
+  ami                    = var.image_id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.public[1].id
   vpc_security_group_ids = [aws_security_group.sg.id]
   key_name               = aws_key_pair.ssh-key.key_name
-  user_data              = file("userdata.sh")
+  user_data              = file(var.user_data_file)
 
   tags = {
     Name = "wordpress"
@@ -169,7 +113,7 @@ resource "aws_instance" "wordpress-ec2" {
 
 resource "aws_db_subnet_group" "default" {
   name       = "main"
-  subnet_ids = [aws_subnet.private-subnet-1.id, aws_subnet.private-subnet-2.id, aws_subnet.private-subnet-3.id]
+  subnet_ids = aws_subnet.private.*.id
 
   tags = {
     Name = "Wordpress DB subnet group"
@@ -182,8 +126,8 @@ resource "aws_security_group" "rds-sg" {
   vpc_id      = aws_vpc.wordpress-vpc.id
 
   ingress {
-    from_port       = 3306
-    to_port         = 3306
+    from_port       = var.db_ingress_from_port
+    to_port         = var.db_ingress_to_port
     protocol        = "tcp"
     security_groups = [aws_security_group.sg.id]
   }
@@ -201,14 +145,14 @@ resource "aws_security_group" "rds-sg" {
 }
 
 resource "aws_db_instance" "default" {
-  allocated_storage      = 20
-  storage_type           = "gp2"
-  engine                 = "mysql"
-  engine_version         = "5.7"
-  instance_class         = "db.t2.micro"
-  name                   = "mydb"
-  username               = "admin"
-  password               = "adminadmin"
+  allocated_storage      = var.allocated_storage
+  storage_type           = var.storage_type
+  engine                 = var.engine
+  engine_version         = var.engine_version
+  instance_class         = var.db_instance_class
+  name                   = var.db_name
+  username               = var.db_username
+  password               = var.db_password
   parameter_group_name   = "default.mysql5.7"
   db_subnet_group_name   = aws_db_subnet_group.default.name
   vpc_security_group_ids = [aws_security_group.rds-sg.id]

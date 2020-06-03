@@ -1,3 +1,3 @@
 .vscode/*
 .terraform/*
-ec2-wp.pub
+credentials.tfvars

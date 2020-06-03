@@ -1,0 +1,11 @@
+image_id             = "ami-0323c3dd2da7fb37d"
+user_data_file       = "userdata.sh"
+instance_type        = "t2.micro"
+db_ingress_from_port = 3306
+db_ingress_to_port   = 3306
+allocated_storage    = 20
+storage_type         = "gp2"
+engine               = "mysql"
+engine_version       = "5.7"
+db_instance_class    = "db.t2.micro"
+db_name              = "mydb"
